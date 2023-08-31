@@ -27,7 +27,8 @@ from lightning_module import DonutDataPLModule, DonutModelPLModule
 
 class CustomCheckpointIO(CheckpointIO):
     def save_checkpoint(self, checkpoint, path, storage_options=None):
-        del checkpoint["state_dict"]
+        if (checkpoint.get("state_dict", None) is not None):
+            del checkpoint["state_dict"]
         torch.save(checkpoint, path)
 
     def load_checkpoint(self, path, storage_options=None):
@@ -141,10 +142,12 @@ def train(config):
 
     custom_ckpt = CustomCheckpointIO()
     trainer = pl.Trainer(
-        num_nodes=config.get("num_nodes", 1),
-        devices=torch.cuda.device_count(),
-        strategy="ddp",
-        accelerator="gpu",
+        # num_nodes=config.get("num_nodes", 1), #TODO uncomment if using gpu
+        # num_nodes=config.get("num_nodes", 0),
+        # devices=torch.cuda.device_count(),
+        # strategy="dp",
+        # accelerator="gpu",
+        accelerator="cpu",
         plugins=custom_ckpt,
         max_epochs=config.max_epochs,
         max_steps=config.max_steps,
@@ -158,6 +161,8 @@ def train(config):
     )
 
     trainer.fit(model_module, data_module, ckpt_path=config.get("resume_from_checkpoint_path", None))
+    trainer.save_checkpoint(f"{Path(config.result_path)}/{config.exp_name}/{config.exp_version}/model_checkpoint.ckpt")
+
 
 
 if __name__ == "__main__":
@@ -168,9 +173,11 @@ if __name__ == "__main__":
 
     config = Config(args.config)
     config.argv_update(left_argv)
+    print(left_argv)
 
     config.exp_name = basename(args.config).split(".")[0]
+    print(config.exp_name)
     config.exp_version = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") if not args.exp_version else args.exp_version
-
+    print(config.exp_version)
     save_config_file(config, Path(config.result_path) / config.exp_name / config.exp_version)
     train(config)
